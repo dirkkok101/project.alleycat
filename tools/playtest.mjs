@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 
 const [outDir, script = 'start;wait 1500;shot alley;state'] = process.argv.slice(2);
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: Number(process.env.DPR ?? 1) });
 await page.addInitScript({ path: new URL('./bots.js', import.meta.url).pathname });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -104,6 +104,14 @@ for (const raw of script.split(script.includes('\n') ? '\n' : ';').map((s) => s.
       await page.evaluate((j) => Object.assign(window.__session.session, JSON.parse(j)), args.join(' '));
       break;
     case 'shot': await page.screenshot({ path: `${outDir}/${args[0]}.png` }); log('shot', args[0]); break;
+    case 'catshot': {
+      // catshot <name> [dog]: a close-up around the cat (or the bulldog) (world coords == viewport at DPR 1)
+      const c = await page.evaluate((who) => (who === 'dog' ? window.__dogshot() : window.__state().cat), args[1]);
+      const x = Math.max(0, Math.min(1280 - 200, c.x - 100));
+      const y = Math.max(0, Math.min(720 - 160, c.y - 100));
+      await page.screenshot({ path: `${outDir}/${args[0]}.png`, clip: { x, y, width: 200, height: 160 } });
+      break;
+    }
     case 'state': log(JSON.stringify(await page.evaluate(() => window.__state()))); break;
     case 'eval': log(JSON.stringify(await page.evaluate(args.join(' ')))); break;
     default: throw new Error(`unknown step ${raw}`);

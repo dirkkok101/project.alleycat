@@ -109,3 +109,12 @@ window.__toHole = (i) => {
   s.cat.body.reset(h.x, h.ledgeY - 30);
   return true;
 };
+window.__floorDish = () => {
+  const s = window.__scene();
+  const d = s.dishes.find((x) => x.tier > 600);
+  return { x: d.img.x, left: d.left };
+};
+window.__dogshot = () => {
+  const d = window.__scene().dog.img;
+  return { x: d.x, y: d.y, active: window.__scene().dog.active };
+};
