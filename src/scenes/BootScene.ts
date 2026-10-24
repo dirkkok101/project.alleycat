@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { setupCamera } from '../display';
 import { preloadAll } from '../assets';
 import { FONT } from '../fx';
 
@@ -8,6 +9,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
+    setupCamera(this);
     const bar = this.add.rectangle(640, 380, 4, 18, 0x55ffff).setOrigin(0, 0.5);
     this.add.rectangle(640, 380, 404, 26).setStrokeStyle(3, 0xff55ff).setOrigin(0.5);
     bar.x = 440;

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { AudioEngine } from '../audio';
-import { fitHeight } from '../assets';
+import { ANIMS, animFrames, charScale, fitHeight } from '../assets';
 import { FONT, puff } from '../fx';
 import type { Cat } from './Cat';
 
@@ -103,9 +103,13 @@ export class Bulldog {
   private dir = 1;
   private frame = 0;
   private barkAt = 0;
+  private walkFrames: string[];
 
   constructor(private scene: Phaser.Scene, private floorY: number, private speed: number) {
-    this.img = fitHeight(scene.add.image(-200, floorY, 'bulldog_walk1').setOrigin(0.5, 1).setDepth(450), 96);
+    this.img = scene.add.image(-200, floorY, 'bulldog_walk1').setOrigin(0.5, 1).setDepth(450);
+    this.walkFrames = animFrames(scene, ANIMS.dogWalk, ['bulldog_walk1', 'bulldog_walk2']);
+    const k = charScale(scene, 'bulldog', 92, 'bulldog_walk1');
+    this.img.setScale(k);
     scene.physics.add.existing(this.img);
     this.body = this.img.body as Phaser.Physics.Arcade.Body;
     this.body.setAllowGravity(false);
@@ -144,12 +148,11 @@ export class Bulldog {
     // Chase the cat while it is on the ground, otherwise trot across and leave.
     if (!this.leaving && catOnGround && Math.abs(cat.x - this.img.x) < 500) this.dir = Math.sign(cat.x - this.img.x) || this.dir;
     this.body.setVelocityX(this.dir * this.speed);
-    this.frame += (this.speed / 60) * 0.03;
+    this.frame += (this.scene.game.loop.delta / 1000) * (6 + this.speed / 40);
     const barking = now < this.barkAt + 300;
-    this.img.setTexture(barking ? 'bulldog_bark' : Math.floor(this.frame) % 2 ? 'bulldog_walk2' : 'bulldog_walk1');
-    fitHeight(this.img, 96);
+    this.img.setTexture(barking ? 'bulldog_bark' : this.walkFrames[Math.floor(this.frame) % this.walkFrames.length]);
     this.img.setFlipX(this.dir < 0);
-    this.img.y = this.floorY - Math.abs(Math.sin(this.frame * Math.PI)) * 3;
+    this.img.y = this.floorY - (this.walkFrames.length <= 2 ? Math.abs(Math.sin(this.frame * Math.PI)) * 3 : 0);
     if (now > this.barkAt + 2500 && Math.abs(cat.x - this.img.x) < 300) {
       this.barkAt = now;
       AudioEngine.get().play('bark', { volume: 0.7 });

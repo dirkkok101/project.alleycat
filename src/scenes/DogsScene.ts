@@ -39,6 +39,8 @@ export class DogsScene extends RoomScene {
   private dishes: Dish[] = [];
   private wasOnGround = true;
   private idleOnDish = 0;
+  private eatUi!: Phaser.GameObjects.Graphics;
+  private eatArrow!: Phaser.GameObjects.Text;
 
   constructor() {
     super('Dogs');
@@ -49,6 +51,12 @@ export class DogsScene extends RoomScene {
     this.dishes = [];
     this.idleOnDish = 0;
     this.wasOnGround = true;
+    this.eatUi = this.add.graphics().setDepth(700);
+    this.eatArrow = this.add
+      .text(0, 0, '↓', { fontFamily: FONT, fontSize: '22px', color: '#ffffff' })
+      .setOrigin(0.5)
+      .setDepth(701)
+      .setVisible(false);
     // Two long shelves form the upper tier.
     for (const [x, w] of [[470, 440], [930, 440]] as const) {
       const sh = this.add.image(x, SHELF_Y, 'shelf').setOrigin(0.5, 0).setDepth(-2);
@@ -77,6 +85,25 @@ export class DogsScene extends RoomScene {
     this.time.addEvent({ delay: 2600, loop: true, callback: () => AudioEngine.get().play('snore', { volume: 0.35 }) });
   }
 
+  /** Show which bowl is in reach, with a ring filling up as the cat eats. */
+  private drawEatUi(d: Dish | undefined): void {
+    const g = this.eatUi;
+    g.clear();
+    for (const x of this.dishes) x.img.setTint(0xffffff);
+    if (!d) return;
+    d.img.setTint(0xfff2b0);
+    const x = d.img.x;
+    const y = d.img.y - 118; // above the cat's head
+    g.fillStyle(0x1b1433, 0.6).fillCircle(x, y, 16);
+    g.lineStyle(5, 0xffd08a, 1);
+    g.beginPath();
+    g.arc(x, y, 13, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, d.bite / 0.55), false);
+    g.strokePath();
+    g.fillStyle(0xffffff, 1);
+    for (let i = 0; i < d.left; i++) g.fillCircle(x - (d.left - 1) * 5 + i * 10, y + 24, 3);
+    this.eatArrow.setPosition(x, y).setVisible(d.bite === 0);
+  }
+
   protected updateRoom(dt: number): void {
     const cat = this.cat;
     const onTier = (tier: number) => cat.onGround && Math.abs(cat.bottom - tier) < 8;
@@ -84,8 +111,14 @@ export class DogsScene extends RoomScene {
     const landed = cat.onGround && !this.wasOnGround;
     this.wasOnGround = cat.onGround;
 
-    // Hint only for players standing on a dish without eating.
-    const onDish = this.dishes.some((d) => d.left > 0 && onTier(d.tier) && Math.abs(d.img.x - cat.x) < 36);
+    // The cat eats with its mouth, which is ahead of its body: measure from the head,
+    // and be generous, so lining the face up with the bowl just works.
+    const mouthX = cat.x + cat.facing * 24;
+    const reach = this.dishes
+      .filter((d) => d.left > 0 && onTier(d.tier) && Math.min(Math.abs(d.img.x - mouthX), Math.abs(d.img.x - cat.x)) < 46)
+      .sort((a, b) => Math.abs(a.img.x - mouthX) - Math.abs(b.img.x - mouthX))[0];
+    const onDish = !!reach;
+    this.drawEatUi(reach);
     // On a dish, ↓ means eat, not drop through the shelf.
     if (onDish) cat.dropUntil = 0;
     this.idleOnDish = onDish && !this.ctrl.down ? this.idleOnDish + dt : 0;
@@ -94,7 +127,7 @@ export class DogsScene extends RoomScene {
     // Eating
     let eating = false;
     for (const d of this.dishes) {
-      if (d.left <= 0 || !onTier(d.tier) || !this.ctrl.down || Math.abs(d.img.x - cat.x) > 36) continue;
+      if (d !== reach || !this.ctrl.down) continue;
       eating = true;
       d.bite += dt;
       if (d.bite >= 0.55) {

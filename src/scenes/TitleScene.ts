@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { setupCamera } from '../display';
 import { AudioEngine } from '../audio';
 import { fitHeight } from '../assets';
 import { FONT, fadeIn, hearts, wipeTo } from '../fx';
@@ -15,6 +16,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
+    setupCamera(this);
     this.started = false;
     this.scene.stop('Hud');
     this.add.image(640, 360, 'bg_title').setDisplaySize(1280, 720);
@@ -60,7 +62,7 @@ export class TitleScene extends Phaser.Scene {
     kb.on('keydown-SPACE', () => this.start());
     kb.on('keydown-ENTER', () => this.start());
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.y > 555 && p.y < 605) this.changeSkill(p.x < 640 ? -1 : 1);
+      if (p.worldY > 555 && p.worldY < 605) this.changeSkill(p.worldX < 640 ? -1 : 1);
       else this.start();
     });
     fadeIn(this);

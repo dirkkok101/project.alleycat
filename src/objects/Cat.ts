@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { AudioEngine } from '../audio';
+import { ANIMS, animFrames, charScale } from '../assets';
 import { puff } from '../fx';
 import type { Controls } from '../input';
 
-const SIZE = 88; // displayed longest side of the cat art
+const HEIGHT = 84; // on-screen height of the standing cat
 const RUN_SPEED = 320;
 const GROUND_ACCEL = 2600;
 // Like the original, a running start is what gets you high: little air steering.
@@ -39,7 +40,11 @@ export class Cat {
   private lastJumpPressAt = -9999;
   private jumpCut = false;
   private wasOnGround = false;
-  private runPhase = 0;
+  private baseScale: number;
+  private runClock = 0;
+  private idleClock = 0;
+  private runFrames: string[];
+  private idleFrames: string[];
   private sx = 1;
   private sy = 1;
   private sqTween?: Phaser.Tweens.Tween;
@@ -50,6 +55,9 @@ export class Cat {
     this.body = this.phys.body as Phaser.Physics.Arcade.Body;
     this.body.setCollideWorldBounds(true);
     this.body.setMaxVelocity(900, 1100);
+    this.runFrames = animFrames(scene, ANIMS.catRun, ['cat_run1', 'cat_run2']);
+    this.idleFrames = animFrames(scene, ANIMS.catIdle, ['cat_idle']);
+    this.baseScale = charScale(scene, 'cat', HEIGHT, 'cat_idle');
     this.img = scene.add.image(x, y, 'cat_idle').setOrigin(0.5, 1).setDepth(500);
     this.setPose('cat_idle');
   }
@@ -82,20 +90,20 @@ export class Cat {
     this.body.setDrag(mode === 'swim' ? 260 : 0, mode === 'swim' ? 260 : 0);
   }
 
-  update(ctrl: Controls, _dt: number): void {
+  update(ctrl: Controls, dt: number): void {
     const now = this.scene.time.now;
     if (this.dead) {
-      this.syncImage();
+      this.syncImage(dt);
       return;
     }
     if (this.frozen) {
       this.body.setVelocityX(0);
-      this.syncImage();
+      this.syncImage(dt);
       return;
     }
     if (this.mode === 'swim') this.updateSwim(ctrl);
     else this.updatePlatform(ctrl, now);
-    this.syncImage();
+    this.syncImage(dt);
   }
 
   private updatePlatform(ctrl: Controls, now: number): void {
@@ -225,7 +233,7 @@ export class Cat {
     if (this.img.texture.key !== key) this.img.setTexture(key);
   }
 
-  private syncImage(): void {
+  private syncImage(dt: number): void {
     if (this.posed) return;
     const b = this.body;
     let pose = 'cat_idle';
@@ -233,14 +241,18 @@ export class Cat {
     else if (this.mode === 'swim') pose = 'cat_swim';
     else if (!this.onGround) pose = b.velocity.y < 0 ? 'cat_jump' : 'cat_fall';
     else if (Math.abs(b.velocity.x) > 30) {
-      this.runPhase += Math.abs(b.velocity.x) * 0.0006 * 16;
-      pose = Math.floor(this.runPhase) % 2 === 0 ? 'cat_run1' : 'cat_run2';
+      // Cadence follows speed: ~8 fps at a trot up to ~14 fps flat out.
+      this.runClock += dt * (8 + (6 * Math.abs(b.velocity.x)) / RUN_SPEED);
+      pose = this.runFrames[Math.floor(this.runClock) % this.runFrames.length];
+    } else {
+      this.idleClock += dt * 6;
+      pose = this.idleFrames[Math.floor(this.idleClock) % this.idleFrames.length];
     }
     if (!this.frozen || this.dead) this.setPose(pose);
 
-    const base = SIZE / Math.max(this.img.width, this.img.height);
-    // A little bob while running sells the gait even with two frames.
-    const bob = pose.startsWith('cat_run') ? Math.abs(Math.sin(this.runPhase * Math.PI)) * 4 : 0;
+    const base = this.baseScale;
+    // With only two run poses, a little bob sells the gait; a real cycle doesn't need it.
+    const bob = this.runFrames.length <= 2 && this.runFrames.includes(pose) ? Math.abs(Math.sin(this.runClock * Math.PI)) * 4 : 0;
     this.img.setScale(base * this.sx * (this.facing < 0 ? -1 : 1), base * this.sy);
     this.img.setPosition(b.center.x, b.bottom + 3 - bob);
     if (this.mode === 'swim' && !this.dead) this.img.setAngle(Phaser.Math.Clamp(b.velocity.y * 0.04, -20, 20) * this.facing);

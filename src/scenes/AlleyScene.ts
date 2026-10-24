@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { setupCamera } from '../display';
 import { AudioEngine } from '../audio';
 import { fitHeight } from '../assets';
 import { banner, fadeIn, hearts, hitStop, popText, puff, shake, sparkles, wipeTo } from '../fx';
@@ -84,6 +85,7 @@ export class AlleyScene extends Phaser.Scene {
   }
 
   create(): void {
+    setupCamera(this);
     this.done = false;
     this.windows = [];
     this.mice = [];

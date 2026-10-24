@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { setupCamera } from '../display';
 import { AudioEngine } from '../audio';
 import { FONT } from '../fx';
 import { game } from '../state';
@@ -24,6 +25,7 @@ export class HudScene extends Phaser.Scene {
   }
 
   create(): void {
+    setupCamera(this);
     this.shownScore = game.session.score;
     const g = this.add.graphics();
     g.fillStyle(0x1b1433, 0.6);

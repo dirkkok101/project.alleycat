@@ -52,9 +52,9 @@ export class Controls {
     const s = this.scene;
     s.input.addPointer(3);
     const mk = (x: number, y: number, label: string, prop: keyof Controls['touch']) => {
-      const c = s.add.circle(x, y, 58, 0xffffff, 0.16).setStrokeStyle(4, 0xffffff, 0.35).setScrollFactor(0).setDepth(1000);
+      const c = s.add.circle(x, y, 58, 0xffffff, 0.16).setStrokeStyle(4, 0xffffff, 0.35).setDepth(1000);
       s.add.text(x, y, label, { fontFamily: 'Fredoka', fontSize: '44px', color: '#ffffff' })
-        .setOrigin(0.5).setAlpha(0.6).setScrollFactor(0).setDepth(1001);
+        .setOrigin(0.5).setAlpha(0.6).setDepth(1001);
       c.setInteractive();
       c.on('pointerdown', () => (this.touch[prop] = true));
       c.on('pointerup', () => (this.touch[prop] = false));

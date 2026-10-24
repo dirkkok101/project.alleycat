@@ -1,5 +1,6 @@
 import '@fontsource/fredoka/latin-600.css';
 import Phaser from 'phaser';
+import { RES } from './display';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { HudScene } from './scenes/HudScene';
@@ -18,8 +19,8 @@ import { AudioEngine } from './audio';
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: 1280,
-  height: 720,
+  width: 1280 * RES,
+  height: 720 * RES,
   backgroundColor: '#1b1433',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   input: { gamepad: true },

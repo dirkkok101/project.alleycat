@@ -18,6 +18,24 @@ export const BACKGROUNDS = [
   'bg_alley', 'bg_title', 'bg_livingroom', 'bg_underwater', 'bg_library', 'bg_kitchen', 'bg_bedroom', 'bg_dogroom', 'bg_love',
 ] as const;
 
+/** Animation frames from art/out/anim; optional, the game falls back to single poses. */
+const frames = (name: string, n: number) => Array.from({ length: n }, (_, i) => `${name}_${String(i).padStart(2, '0')}`);
+export const ANIMS = {
+  catRun: frames('cat_run', 6),
+  catIdle: frames('cat_idle', 6),
+  dogWalk: frames('bulldog_walk', 4),
+};
+const ANIM_KEYS = new Set(Object.values(ANIMS).flat());
+const missing = new Set<string>();
+
+/** Frames of an animation that actually loaded, or the fallback poses. */
+export function animFrames(scene: Phaser.Scene, keys: string[], fallback: string[]): string[] {
+  // A file can also fail to decode (e.g. a dev server answering with HTML), which
+  // leaves no texture rather than a load error, so check both.
+  const ok = keys.filter((k) => !missing.has(k) && scene.textures.exists(k));
+  return ok.length ? ok : fallback;
+}
+
 export type SpriteKey = (typeof SPRITES)[number];
 export type BgKey = (typeof BACKGROUNDS)[number];
 
@@ -30,8 +48,11 @@ const PLACEHOLDER_COLORS: Record<string, number> = {
 export function preloadAll(scene: Phaser.Scene): void {
   for (const key of SPRITES) scene.load.image(key, `assets/${key}.png`);
   for (const key of BACKGROUNDS) scene.load.image(key, `assets/${key}.jpg`);
+  for (const key of ANIM_KEYS) scene.load.image(key, `assets/${key}.png`);
+  scene.load.json('sprite-meta', 'assets/sprite-meta.json');
   scene.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
-    makePlaceholder(scene, file.key);
+    missing.add(file.key);
+    if (!ANIM_KEYS.has(file.key)) makePlaceholder(scene, file.key);
   });
 }
 
@@ -55,6 +76,17 @@ function makePlaceholder(scene: Phaser.Scene, key: string): void {
   }
   g.generateTexture(key, w, h);
   g.destroy();
+}
+
+/**
+ * Scale factor that shows a character's reference pose `height` px tall.
+ * All of a character's frames share one canvas (tools/normalize_sprites.py),
+ * so one factor keeps every frame the same size.
+ */
+export function charScale(scene: Phaser.Scene, group: 'cat' | 'bulldog', height: number, fallbackTexture: string): number {
+  const meta = scene.cache.json.get('sprite-meta') as Record<string, { refHeight: number }> | undefined;
+  const ref = meta?.[group]?.refHeight ?? scene.textures.get(fallbackTexture).getSourceImage().height;
+  return height / ref;
 }
 
 /** Scale an image uniformly so its displayed height is h. */

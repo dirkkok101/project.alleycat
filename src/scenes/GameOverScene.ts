@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { setupCamera } from '../display';
 import { AudioEngine } from '../audio';
 import { fitHeight } from '../assets';
 import { FONT, fadeIn, sparkles, wipeTo } from '../fx';
@@ -10,6 +11,7 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create(): void {
+    setupCamera(this);
     this.scene.stop('Hud');
     const s = game.session;
     const isNew = game.commitHiScore();

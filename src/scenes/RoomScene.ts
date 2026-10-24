@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { setupCamera } from '../display';
 import { AudioEngine, type MusicTrack } from '../audio';
 import type { BgKey } from '../assets';
 import { banner, fadeIn, hitStop, popText, shake, sparkles, wipeTo } from '../fx';
@@ -51,6 +52,7 @@ export abstract class RoomScene extends Phaser.Scene {
   }
 
   create(): void {
+    setupCamera(this);
     this.done = false;
     this.elapsed = this.bonusStartOffset;
     this.diff = difficulty(game.session.level);
