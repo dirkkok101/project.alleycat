@@ -1,0 +1,16 @@
+{
+  "cat": {
+    "canvas": [
+      410,
+      359
+    ],
+    "refHeight": 238
+  },
+  "bulldog": {
+    "canvas": [
+      364,
+      222
+    ],
+    "refHeight": 187
+  }
+}
