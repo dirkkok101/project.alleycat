@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alley Cat Audio Audition</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; padding: 16px; background: #1b1433; color: #f3eaff; font: 14px/1.4 system-ui, sans-serif; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      h2 { font-size: 15px; margin: 18px 0 6px; color: #ffb3d9; }
+      .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+      button { background: #3a2a66; color: inherit; border: 1px solid #6b55b0; border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
+      button:hover { background: #4b388a; }
+      button[aria-pressed='true'] { background: #c2407f; border-color: #ff8cc6; }
+      label { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; }
+      #status { margin: 6px 0; color: #b8a8e0; }
+      #meter { width: 100%; max-width: 420px; height: 10px; background: #2a1f4a; border-radius: 5px; overflow: hidden; }
+      #meter > div { height: 100%; width: 0; background: linear-gradient(90deg, #6fe3a0, #ffd36b 70%, #ff5a7a); }
+    </style>
+  </head>
+  <body>
+    <h1>Alley Cat audio audition</h1>
+    <div id="status">Click anything to unlock audio.</div>
+    <div id="meter"><div></div></div>
+    <div id="peak">peak: -</div>
+    <h2>Music</h2>
+    <div class="grid" id="music"></div>
+    <h2>Layers</h2>
+    <div class="grid" id="layers"></div>
+    <h2>Mix</h2>
+    <div>
+      <label>Music <input id="musicVol" type="range" min="0" max="1" step="0.01" value="1" /></label>
+      <label>SFX <input id="sfxVol" type="range" min="0" max="1" step="0.01" value="1" /></label>
+    </div>
+    <h2>Sound effects</h2>
+    <div class="grid" id="sfx"></div>
+    <script type="module" src="/src/audio/audition.ts"></script>
+  </body>
+</html>
