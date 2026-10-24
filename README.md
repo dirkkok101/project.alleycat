@@ -13,7 +13,7 @@ npm run build    # static site in dist/
 npm test         # rules unit tests
 ```
 
-Controls: ←/→ (or A/D) move · Space/↑/Z jump (hold for higher) · ↓ drop through lines, sneak, and eat · M mute. Gamepads and touch screens work too.
+Controls: ←/→ (or A/D) move · Space/↑/Z jump (hold for higher; a running start jumps much higher) · ↓ drop through lines, eat, and tunnel through the cheese · P pause · M mute. Gamepads and touch screens work too.
 
 ## Rooms
 
@@ -21,11 +21,15 @@ Controls: ←/→ (or A/D) move · Space/↑/Z jump (hold for higher) · ↓ dro
 |---|---|
 | Fishbowl | Jump into the bowl, then eat every fish underwater; dodge eels, surface for air |
 | Bookshelf | Collect three ferns from the high shelves; avoid the dangling spider |
-| Cheese | Pounce on mice peeking out of the cheese holes |
+| Cheese | Catch the shy mice peeking from 16 holes; they duck when you get close, so press ↓ in a hole to tunnel out of its secret partner hole |
 | Birdcage | Shove the cage off the table, then catch the canary |
-| Sleeping dogs | Sneak and empty every dish without waking the dogs |
+| Sleeping dogs | Empty every dish (hold ↓) on the floor and shelf without lingering near the dogs |
 
-The broom never hurts you, but it shoves you around and can sweep you out of the window. Dawdle and the bulldog barges in.
+The broom never hurts you, but it flies after you and sweeps you toward the window. Every moment on a room's floor risks the bulldog barging in.
+
+In the alley, every window that opens throws something at you (from level 3 a hit costs a life), windows only open while you're up on the fence or higher, and you enter one by dropping into it. Each room won adds a gift to the love scene; a gift keeps a rival busy for a while.
+
+New players get a gentle first night on Kitten: sitting mice to learn jumping, one window that stays open, hazards that wait until you've tried the goal, and one free bulldog bump. Rules follow the original's per-level tables (see `research_notes/Cute Alley Cat remake research/original_mechanics_deep.md`).
 
 ## Project layout
 

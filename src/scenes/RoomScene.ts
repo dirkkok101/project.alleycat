@@ -8,6 +8,7 @@ import { Cat } from '../objects/Cat';
 import { Broom, Bulldog } from '../objects/Hazards';
 import { catIn, oneWay } from '../objects/platforms';
 import { game } from '../state';
+import { firstTime, funnel, useFreeSave } from '../tutorial';
 
 export const FLOOR_Y = 652;
 
@@ -38,6 +39,9 @@ export abstract class RoomScene extends Phaser.Scene {
   done = false;
   protected elapsed = 0;
   private nextDogAt = 0;
+  /** First visit for a new player: hazards wait until the goal has been tried once. */
+  protected asleep = false;
+  private zzz?: Phaser.GameObjects.Text;
   private dogLeaveAt = 0;
   private enteredAt = 0;
   private windowZone?: Phaser.GameObjects.Zone;
@@ -74,10 +78,21 @@ export abstract class RoomScene extends Phaser.Scene {
 
     this.buildRoom();
 
+    this.broom = undefined;
+    this.dog = undefined;
     if (this.useBroom) this.broom = new Broom(this, 900, FLOOR_Y, this.diff.broomSpeed, this.diff.broomChase);
     if (this.useDog) {
       this.dog = new Bulldog(this, FLOOR_Y, this.diff.dogSpeed * 0.9);
-      this.nextDogAt = this.diff.roomDogDelay;
+      this.nextDogAt = 3;
+    }
+    this.asleep = game.tutorial && firstTime(`room:${this.roomId}`);
+    this.zzz = undefined;
+    if (this.asleep && this.broom) {
+      this.broom.img.setAngle(-80);
+      this.zzz = this.add
+        .text(this.broom.img.x + 30, FLOOR_Y - 60, 'z z z', { fontFamily: 'Fredoka', fontSize: '26px', color: '#ffffff', stroke: '#1b1433', strokeThickness: 5 })
+        .setDepth(450);
+      this.tweens.add({ targets: this.zzz, y: FLOOR_Y - 75, alpha: 0.5, duration: 900, yoyo: true, repeat: -1 });
     }
 
     this.enteredAt = this.time.now;
@@ -115,19 +130,34 @@ export abstract class RoomScene extends Phaser.Scene {
     AudioEngine.get().setHurry(timeBonus(this.elapsed) < 600);
 
     const onFloor = this.cat.bottom >= FLOOR_Y - 4;
+    if (this.asleep) {
+      this.updateRoom(dt);
+      return;
+    }
     this.broom?.update(this.cat, onFloor, (dir) => {
       shake(this, 0.004);
       if (dir < 0 && this.cat.x < 260) this.time.delayedCall(250, () => this.sweptOut());
     });
 
     if (this.dog) {
-      if (!this.dog.active && this.elapsed >= this.nextDogAt) {
+      // Like the original: every moment on the floor is a gamble that the dog barges in.
+      const onTheFloor = onFloor && this.cat.onGround;
+      if (!this.dog.active && !this.dog.pending && onTheFloor && this.elapsed >= this.nextDogAt &&
+        Math.random() < this.diff.roomDogChance * dt) {
         this.dog.enter(this.cat.x);
-        this.dogLeaveAt = this.elapsed + 9;
-        this.nextDogAt = this.elapsed + 16;
+        this.dogLeaveAt = this.elapsed + 7;
+        this.nextDogAt = this.elapsed + 12;
       }
       if (this.dog.active && this.elapsed > this.dogLeaveAt) this.dog.leave();
-      if (this.dog.update(this.cat, onFloor && this.cat.onGround)) this.loseLife('The dog got you!');
+      if (this.dog.update(this.cat, onFloor && this.cat.onGround)) {
+        if (useFreeSave()) {
+          AudioEngine.get().play('bark');
+          this.cat.knock(Math.sign(this.cat.x - this.dog.img.x) || 1, 600, 600);
+          this.cat.hurtFlash(2500);
+          this.dog.leave();
+          banner(this, 'Woof! Careful!', 'Get off the floor!', '#ff9ec7');
+        } else this.loseLife('The dog got you!');
+      }
     }
 
     // Jumping back out of the window gives up the room.
@@ -139,8 +169,21 @@ export abstract class RoomScene extends Phaser.Scene {
     this.updateRoom(dt);
   }
 
+  /** The player made first progress on the goal: wake the household. */
+  protected progress(): void {
+    if (!this.asleep) return;
+    this.asleep = false;
+    this.zzz?.destroy();
+    this.nextDogAt = this.elapsed + 3;
+    if (this.broom) {
+      this.tweens.add({ targets: this.broom.img, angle: 0, duration: 300, ease: 'Back.Out' });
+      AudioEngine.get().play('sweep');
+    }
+  }
+
   win(): void {
     if (this.done) return;
+    funnel('first-room-won');
     this.done = true;
     const room = this.roomId === 'underwater' ? 'fishbowl' : this.roomId;
     const pts = winRoom(game.session, room, this.elapsed);

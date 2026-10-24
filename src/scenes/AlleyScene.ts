@@ -8,13 +8,15 @@ import { Cat } from '../objects/Cat';
 import { Bulldog } from '../objects/Hazards';
 import { catIn, oneWay } from '../objects/platforms';
 import { game } from '../state';
+import { firstTime, funnel, hasSeen, hint, useFreeSave } from '../tutorial';
 
 const GROUND_Y = 702;
 const FENCE_Y = 560;
 const LINE_YS = [440, 310, 180]; // bottom, middle, top washing line
 const WINDOW_ROWS = [372, 242, 112];
 const WINDOW_XS = [190, 490, 790, 1090];
-const CAN_XS = [120, 560, 1000];
+// Fewer bins to climb on as the nights get harder.
+const CANS_BY_LEVEL = [[120, 560, 1000], [120, 560, 1000], [300, 900], [300, 900], [640], [300, 900], [640], [640]];
 
 export const ROOM_SCENES: Record<RoomId, string> = {
   fishbowl: 'Fishbowl',
@@ -29,6 +31,8 @@ interface AlleyWindow {
   zone: Phaser.GameObjects.Zone;
   open: boolean;
   love: boolean;
+  /** Stays open until entered (the first-night window). */
+  held: boolean;
   closeAt: number;
   row: number;
 }
@@ -58,11 +62,18 @@ export class AlleyScene extends Phaser.Scene {
   private lines: { g: Phaser.GameObjects.Graphics; y: number; sag: number; vel: number }[] = [];
   private nextWindowAt = 0;
   private groundTime = 0;
+  private fenceTime = 0;
   private airTime = 0;
   private done = false;
   private from = 'start';
   private elapsed = 0;
   private loveCallAt = 0;
+  /** First night of a new player's run: scripted, gentle opening. */
+  private firstNight = false;
+  private tutorMouse?: Phaser.GameObjects.Image;
+  private groundJumps = 0;
+  private nearWindowTime = 0;
+  private her?: Phaser.GameObjects.Image;
 
   constructor() {
     super('Alley');
@@ -83,6 +94,11 @@ export class AlleyScene extends Phaser.Scene {
     this.loveCallAt = 0;
     this.groundTime = 0;
     this.airTime = 0;
+    this.groundJumps = 0;
+    this.fenceTime = 0;
+    this.nearWindowTime = 0;
+    this.tutorMouse = undefined;
+    this.firstNight = game.tutorial && !hasSeen('entered-room');
     this.diff = difficulty(game.session.level);
     this.physics.world.setBounds(0, -300, 1280, 1020);
 
@@ -104,7 +120,7 @@ export class AlleyScene extends Phaser.Scene {
       for (const x of WINDOW_XS) {
         const img = fitHeight(this.add.image(x, WINDOW_ROWS[r], 'window_closed').setDepth(-8), 100);
         const zone = this.add.zone(x, WINDOW_ROWS[r] - 8, 56, 52);
-        this.windows.push({ img, zone, open: false, love: false, closeAt: 0, row: r });
+        this.windows.push({ img, zone, open: false, love: false, held: false, closeAt: 0, row: r });
       }
     }
 
@@ -126,7 +142,7 @@ export class AlleyScene extends Phaser.Scene {
       f.setDisplaySize(660, 118);
     }
     ledges.add(this.add.zone(640, FENCE_Y + 6, 1280, 12));
-    for (const x of CAN_XS) {
+    for (const x of CANS_BY_LEVEL[game.session.level]) {
       const can = fitHeight(this.add.image(x, GROUND_Y, 'trashcan').setOrigin(0.5, 1).setDepth(10), 92);
       solids.add(this.add.zone(x, GROUND_Y - 44, can.displayWidth * 0.8, 88));
     }
@@ -143,9 +159,24 @@ export class AlleyScene extends Phaser.Scene {
       const img = fitHeight(this.add.image(Math.random() * 1200 + 40, y, 'mouse_run1').setOrigin(0.5, 1).setDepth(20), 40);
       this.mice.push({ img, line: i, dir: Math.random() < 0.5 ? 1 : -1, alive: true, respawnAt: 0, phase: 0 });
     });
+    if (this.firstNight && !hasSeen('tutor-mice')) {
+      // Line mice wait until the sitting mice have taught jumping.
+      for (const m of this.mice) {
+        m.alive = false;
+        m.respawnAt = Infinity;
+        m.img.setVisible(false);
+      }
+      this.spawnTutorMouse(560, GROUND_Y - 92);
+    } else if (this.firstNight) {
+      this.openFirstWindow();
+    }
 
     this.dog = new Bulldog(this, GROUND_Y, this.diff.dogSpeed);
 
+    if (game.session.herWindow < 0) {
+      game.session.herWindow = 8 + Math.floor(Math.random() * 4); // top row
+    }
+    this.placeSweetheart();
     if (game.session.loveUnlocked) this.setLoveWindow();
 
     this.scene.launch('Hud');
@@ -155,14 +186,69 @@ export class AlleyScene extends Phaser.Scene {
     audio.setLayer('danger', false);
     audio.setHurry(false);
     fadeIn(this);
-    if (this.from === 'start') banner(this, 'Meow-velous night!', 'Catch mice on the lines · jump into open windows');
+    if (this.from === 'start' && game.tutorial) banner(this, 'Win a room to meet her!', '', '#ffb3d9');
+    else if (this.from === 'start') banner(this, 'Meow-velous night!');
     else if (this.from === 'win') banner(this, 'A sweetheart calls!', 'Find the window with the pink glow 💗', '#ffb3d9');
     if (fromRoom) this.cat.hurtFlash(1200);
   }
 
+  /** She waits behind her window from the start, so players know what it's all for. */
+  private placeSweetheart(): void {
+    const w = this.windows[game.session.herWindow];
+    this.her = fitHeight(this.add.image(w.img.x, w.img.y + 22, 'girlcat').setOrigin(0.5, 1).setDepth(-7), 48);
+    if (!game.session.loveUnlocked) {
+      this.her.setAlpha(0.75);
+      const lock = fitHeight(this.add.image(w.img.x + 30, w.img.y - 30, 'heart_broken').setDepth(-6), 26);
+      this.tweens.add({ targets: lock, angle: 10, duration: 700, yoyo: true, repeat: -1 });
+    }
+    this.tweens.add({ targets: this.her, angle: 6, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+  }
+
+  private spawnTutorMouse(x: number, y: number): void {
+    const m = fitHeight(this.add.image(x, y, 'mouse_run1').setOrigin(0.5, 1).setDepth(20), 40);
+    m.setFlipX(true);
+    this.tweens.add({ targets: m, scaleY: m.scaleY * 1.08, duration: 300, yoyo: true, repeat: -1 });
+    this.tutorMouse = m;
+  }
+
+  private updateTutorMouse(): void {
+    const m = this.tutorMouse;
+    if (!m) return;
+    const r = Phaser.Geom.Rectangle.Inflate(m.getBounds(), 12, 12);
+    const b = this.cat.body;
+    if (this.cat.stunned || !Phaser.Geom.Intersects.RectangleToRectangle(r, new Phaser.Geom.Rectangle(b.x, b.y, b.width, b.height))) return;
+    const pts = catchLineMouse(game.session, 0, this.time.now / 1000);
+    AudioEngine.get().play('catch');
+    AudioEngine.get().play('squeak');
+    popText(this, m.x, m.y - 30, `+${pts}`);
+    sparkles(this, m.x, m.y - 10, 10);
+    hitStop(this, 50);
+    m.destroy();
+    this.tutorMouse = undefined;
+    funnel('first-mouse');
+    if (firstTime('tutor-mouse-1')) {
+      // Next lesson sits higher: the fence.
+      this.spawnTutorMouse(820, FENCE_Y);
+      return;
+    }
+    firstTime('tutor-mice');
+    for (const lm of this.mice) lm.respawnAt = this.elapsed + 0.4;
+    this.openFirstWindow();
+  }
+
+  /** One window on the lowest row opens and stays open until the cat jumps in. */
+  private openFirstWindow(): void {
+    const w = this.windows.find((x) => x.row === 0 && x.img.x === WINDOW_XS[1])!;
+    w.open = true;
+    w.held = true;
+    w.img.setTexture('window_open');
+    fitHeight(w.img, 100);
+    AudioEngine.get().play('windowOpen');
+    this.time.addEvent({ delay: 600, loop: true, callback: () => w.open && sparkles(this, w.img.x, w.img.y, 3, 0xffe9a8) });
+  }
+
   private setLoveWindow(): void {
-    const top = this.windows.filter((w) => w.row >= 1);
-    const w = top[Math.floor(Math.random() * top.length)];
+    const w = this.windows[game.session.herWindow];
     w.love = true;
     w.open = true;
     w.img.setTexture('window_love');
@@ -178,11 +264,40 @@ export class AlleyScene extends Phaser.Scene {
     if (this.done) return;
     this.elapsed += dt;
 
+    this.updateOnboarding(dt);
     this.updateWindows();
     this.updateMice(dt);
+    this.updateFenceCamp(dt);
     this.updateThrown();
     this.updateDog(dt);
     this.checkWindowEntry();
+  }
+
+  private updateOnboarding(dt: number): void {
+    const c = this.cat;
+    if (this.ctrl.jumpPressed && c.onGround) funnel('first-jump');
+    if (c.onGround && Math.abs(c.bottom - FENCE_Y) < 8 && firstTime('fence')) funnel('fence');
+    if (!game.tutorial) return;
+    this.updateTutorMouse();
+    // Never gate for long: point at the mouse, then skip ahead.
+    const m = this.tutorMouse;
+    if (m && this.elapsed > 12) hint(this, m.x, m.y - 70, 'Catch the mouse!', 'tutor-mouse');
+    if (m && this.elapsed > 25) {
+      m.destroy();
+      this.tutorMouse = undefined;
+      firstTime('tutor-mice');
+      for (const lm of this.mice) lm.respawnAt = this.elapsed + 0.4;
+      this.openFirstWindow();
+    }
+    // Adaptive hints: only for players who are stuck.
+    if (this.ctrl.jumpPressed && c.bottom >= GROUND_Y - 4 && !hasSeen('fence') && ++this.groundJumps >= 4) {
+      hint(this, c.x, c.y - 90, 'Run, then jump to leap higher!', 'run-jump');
+    }
+    const fw = this.windows.find((w) => w.held && w.open);
+    if (fw && c.onGround && Math.abs(c.bottom - LINE_YS[0]) < 10 && Math.abs(c.x - fw.img.x) < 160) {
+      this.nearWindowTime += dt;
+      if (this.nearWindowTime > 2.5) hint(this, fw.img.x, fw.img.y - 80, 'Jump into the open window!', 'window');
+    }
   }
 
   private updateLines(dt: number): void {
@@ -208,9 +323,10 @@ export class AlleyScene extends Phaser.Scene {
 
   private updateWindows(): void {
     const now = this.elapsed;
-    if (now >= this.nextWindowAt) {
+    const catUp = this.cat.bottom <= FENCE_Y + 6;
+    if (now >= this.nextWindowAt && !this.firstNight && catUp) {
       this.nextWindowAt = now + this.diff.windowOpenEvery * (0.7 + Math.random() * 0.6);
-      const closed = this.windows.filter((w) => !w.open);
+      const closed = this.windows.filter((w, i) => !w.open && i !== game.session.herWindow);
       const w = closed[Math.floor(Math.random() * closed.length)];
       if (w) {
         w.open = true;
@@ -222,11 +338,12 @@ export class AlleyScene extends Phaser.Scene {
         this.tweens.add({ targets: w.img, scaleX: s, scaleY: s, duration: 260, ease: 'Back.Out' });
         sparkles(this, w.img.x, w.img.y, 5, 0xffe9a8);
         AudioEngine.get().play('windowOpen', { volume: 0.5, pan: (w.img.x - 640) / 640 });
-        if (Math.random() < this.diff.throwChance) this.time.delayedCall(500 + Math.random() * 900, () => this.throwFrom(w));
+        // Every opened window throws something, unless something is already in the air.
+        if (this.thrown.length === 0) this.time.delayedCall(350 + Math.random() * 500, () => this.throwFrom(w));
       }
     }
     for (const w of this.windows) {
-      if (w.open && !w.love && now >= w.closeAt) {
+      if (w.open && !w.love && !w.held && now >= w.closeAt) {
         w.open = false;
         w.img.setTexture('window_closed');
         fitHeight(w.img, 100);
@@ -240,6 +357,22 @@ export class AlleyScene extends Phaser.Scene {
         AudioEngine.get().play('meow', { pitch: 1.35, volume: 0.5, pan: (lw.img.x - 640) / 640 });
       }
     }
+  }
+
+  /** Loitering on the fence gets something dropped right on your head. */
+  private updateFenceCamp(dt: number): void {
+    const onFence = this.cat.onGround && Math.abs(this.cat.bottom - FENCE_Y) < 8;
+    this.fenceTime = onFence ? this.fenceTime + dt : 0;
+    if (this.firstNight || this.fenceTime < this.diff.fenceCampSeconds) return;
+    this.fenceTime = 0;
+    const kinds = ['shoe', 'boot', 'clock', 'book'];
+    const img = fitHeight(this.add.image(this.cat.x + this.cat.body.velocity.x * 0.3, -30, kinds[Math.floor(Math.random() * kinds.length)]).setDepth(600), 40);
+    this.physics.add.existing(img);
+    const body = img.body as Phaser.Physics.Arcade.Body;
+    body.setGravityY(-1400);
+    body.setAngularVelocity(300);
+    this.thrown.push({ img, body });
+    AudioEngine.get().play('throw');
   }
 
   private throwFrom(w: AlleyWindow): void {
@@ -266,6 +399,11 @@ export class AlleyScene extends Phaser.Scene {
         continue;
       }
       if (!this.cat.invulnerable && !this.cat.stunned && this.physics.overlap(t.img, this.cat.phys)) {
+        if (this.diff.throwKills) {
+          AudioEngine.get().play('hit');
+          this.die('Bonk!');
+          return;
+        }
         AudioEngine.get().play('hit');
         AudioEngine.get().play('meow', { pitch: 0.8 });
         shake(this, 0.008);
@@ -329,13 +467,14 @@ export class AlleyScene extends Phaser.Scene {
       this.airTime += dt;
       this.groundTime = 0;
     }
-    if (!this.dog.active && this.groundTime > 1 && this.elapsed > 4) this.dog.enter(this.cat.x);
+    const dogReady = !game.tutorial || hasSeen('fence');
+    if (!this.dog.active && dogReady && this.groundTime > 1 && this.elapsed > 4) this.dog.enter(this.cat.x);
     if (this.dog.active && this.airTime > 2.5) this.dog.leave();
-    if (this.dog.update(this.cat, onStreet)) this.die();
+    if (this.dog.update(this.cat, onStreet)) this.die('Woof! Caught!', true);
   }
 
   private checkWindowEntry(): void {
-    if (this.cat.stunned) return;
+    if (this.cat.stunned || this.cat.body.velocity.y <= 0) return;
     for (const w of this.windows) {
       if (!w.open) continue;
       if (!catIn(this.cat, w.zone)) continue;
@@ -346,6 +485,8 @@ export class AlleyScene extends Phaser.Scene {
 
   private enterWindow(w: AlleyWindow): void {
     this.done = true;
+    firstTime('entered-room');
+    funnel('first-window');
     const audio = AudioEngine.get();
     audio.play('enterRoom');
     audio.setLayer('danger', false);
@@ -363,16 +504,25 @@ export class AlleyScene extends Phaser.Scene {
     this.time.delayedCall(380, () => wipeTo(this, ROOM_SCENES[room]));
   }
 
-  private die(): void {
+  private die(reason: string, byDog = false): void {
     if (this.done) return;
+    if (byDog && useFreeSave()) {
+      AudioEngine.get().play('bark');
+      shake(this, 0.008);
+      this.cat.knock(Math.sign(this.cat.x - this.dog.img.x) || 1, 600, 600);
+      this.cat.hurtFlash(2500);
+      this.dog.leave();
+      banner(this, 'Woof! Careful!', 'Get off the ground!', '#ff9ec7');
+      return;
+    }
     this.done = true;
     shake(this, 0.014, 320);
     hitStop(this, 140);
     const audio = AudioEngine.get();
-    audio.play('growl');
+    if (byDog) audio.play('growl');
     audio.play('lifeLost');
     const over = loseLife(game.session);
-    banner(this, 'Woof! Caught!', over ? '' : `${game.session.lives} ${game.session.lives === 1 ? 'life' : 'lives'} left`, '#ff9ec7');
+    banner(this, reason, over ? '' : `${game.session.lives} ${game.session.lives === 1 ? 'life' : 'lives'} left`, '#ff9ec7');
     this.cat.die(() => {
       if (over) wipeTo(this, 'GameOver');
       else this.scene.restart({ from: 'respawn' });

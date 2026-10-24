@@ -6,10 +6,12 @@ import type { Controls } from '../input';
 const SIZE = 88; // displayed longest side of the cat art
 const RUN_SPEED = 320;
 const GROUND_ACCEL = 2600;
-const AIR_ACCEL = 1700;
+// Like the original, a running start is what gets you high: little air steering.
+const AIR_ACCEL = 650;
 const GROUND_DECEL = 3000;
-const AIR_DECEL = 1100;
-const JUMP_VELOCITY = 860;
+const AIR_DECEL = 260;
+const STAND_JUMP = 725;
+const RUN_JUMP = 870;
 const COYOTE_MS = 110;
 const BUFFER_MS = 130;
 
@@ -160,9 +162,8 @@ export class Cat {
 
   doJump(power = 1): void {
     const b = this.body;
-    b.setVelocityY(-JUMP_VELOCITY * power);
-    // Carry momentum: a running start adds a little height, like the original.
-    if (Math.abs(b.velocity.x) > RUN_SPEED * 0.8) b.setVelocityY(b.velocity.y - 40);
+    const run = Phaser.Math.Clamp(Math.abs(b.velocity.x) / RUN_SPEED, 0, 1);
+    b.setVelocityY(-(STAND_JUMP + (RUN_JUMP - STAND_JUMP) * run) * power);
     this.lastGroundAt = -9999;
     this.lastJumpPressAt = -9999;
     this.jumpCut = false;

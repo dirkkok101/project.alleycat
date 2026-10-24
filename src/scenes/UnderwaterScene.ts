@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { AudioEngine } from '../audio';
 import { fitHeight, fitWidth } from '../assets';
 import { popText, sparkles } from '../fx';
+import { game } from '../state';
+import { hint } from '../tutorial';
 import { RoomScene } from './RoomScene';
 
 const SURFACE_Y = 120;
-const AIR_SECONDS = 14;
 
 interface Fish {
   img: Phaser.GameObjects.Image;
@@ -19,7 +20,7 @@ export class UnderwaterScene extends RoomScene {
   readonly roomId = 'underwater' as const;
   readonly bgKey = 'bg_underwater' as const;
   readonly title = 'Splash!';
-  readonly hint = 'Eat all the fish · avoid eels · surface for air';
+  readonly hint = 'Eat every fish · mind the eels';
   protected music = 'fishbowl' as const;
   protected useBroom = false;
   protected useDog = false;
@@ -38,6 +39,8 @@ export class UnderwaterScene extends RoomScene {
     this.fish = [];
     this.eels = [];
     this.air = 1;
+    this.surfaced = false;
+    this.lastBubble = 0;
     this.physics.world.setBounds(30, SURFACE_Y - 70, 1220, 630);
     this.cat.setMode('swim');
     this.cat.body.reset(640, 200);
@@ -49,11 +52,7 @@ export class UnderwaterScene extends RoomScene {
       const img = fitHeight(this.add.image(200 + Math.random() * 900, 260 + Math.random() * 340, 'goldfish').setDepth(300), 40);
       this.fish.push({ img, vx: (Math.random() < 0.5 ? -1 : 1) * (60 + Math.random() * 60), vy: 0, alive: true });
     }
-    for (let i = 0; i < this.diff.eelCount; i++) {
-      const baseY = 300 + i * 140 + Math.random() * 60;
-      const img = fitHeight(this.add.image(i % 2 ? 1300 : -20, baseY, 'eel').setDepth(310), 50);
-      this.eels.push({ img, dir: i % 2 ? -1 : 1, baseY, t: Math.random() * 10, speed: 110 + this.diff.spiderSpeed * 0.6 });
-    }
+    for (let i = 0; i < this.diff.eelCount; i++) this.addEel();
     // Ambient bubbles
     this.time.addEvent({
       delay: 400,
@@ -66,6 +65,15 @@ export class UnderwaterScene extends RoomScene {
     });
   }
 
+  /** Eels swim in from the sides; each fish eaten brings another (as in the original). */
+  private addEel(): void {
+    const i = this.eels.length;
+    if (i >= this.diff.maxEels) return;
+    const baseY = SURFACE_Y + 120 + ((i * 97) % 420);
+    const img = fitHeight(this.add.image(i % 2 ? 1340 : -60, baseY, 'eel').setDepth(310), 50);
+    this.eels.push({ img, dir: i % 2 ? -1 : 1, baseY, t: Math.random() * 10, speed: 100 + this.diff.dogSpeed * 0.3 + Math.random() * 40 });
+  }
+
   protected updateRoom(dt: number): void {
     const cat = this.cat;
     // Air
@@ -75,9 +83,10 @@ export class UnderwaterScene extends RoomScene {
       this.air = Math.min(1, this.air + dt * 0.8);
     } else {
       this.surfaced = false;
-      this.air -= dt / AIR_SECONDS;
+      this.air -= dt / this.diff.airSeconds;
     }
     this.registry.set('air', this.air);
+    if (this.air < 0.5 && game.tutorial) hint(this, cat.x, cat.y - 80, 'Air! Swim up ↑', 'air');
     if (this.air < 0.3 && this.time.now - this.lastBubble > 600) {
       this.lastBubble = this.time.now;
       AudioEngine.get().play('tick', { volume: 0.5 });
@@ -111,6 +120,8 @@ export class UnderwaterScene extends RoomScene {
       f.img.setFlipX(f.vx < 0);
       if (d < 46 && !cat.stunned) {
         f.alive = false;
+        this.progress();
+        this.addEel();
         AudioEngine.get().play('eat');
         sparkles(this, f.img.x, f.img.y, 8, 0xffb070);
         popText(this, f.img.x, f.img.y - 20, 'nom!', '#ffb070', 28);
@@ -123,6 +134,7 @@ export class UnderwaterScene extends RoomScene {
     }
 
     for (const e of this.eels) {
+      if (this.asleep) continue;
       e.t += dt;
       e.img.x += e.dir * e.speed * dt;
       e.img.y = e.baseY + Math.sin(e.t * 2) * 40;

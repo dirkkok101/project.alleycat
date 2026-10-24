@@ -54,45 +54,84 @@ export function clampLevel(level: number): number {
   return Math.max(0, Math.min(MAX_LEVEL, Math.floor(level)));
 }
 
+// Per-level tables. Shapes follow the 1984 PC game's data segment (see
+// research_notes/.../original_mechanics_deep.md), rescaled to our 1280x720 screen.
+const pick = <T>(table: readonly T[], l: number): T => table[l];
+
 export interface Difficulty {
-  windowOpenEvery: number; // seconds between window openings
-  windowOpenFor: number; // seconds a window stays open
-  throwChance: number; // 0..1 chance an opened window throws something
+  windowOpenEvery: number; // seconds between window openings (cat on the fence or higher)
+  windowOpenFor: number; // seconds a window stays fully open
+  throwKills: boolean; // a thrown object costs a life (from level 2; knock-only before)
+  fenceCampSeconds: number; // loitering on the fence this long brings a drop from above
   dogSpeed: number;
   broomSpeed: number;
   broomChase: number; // 0..1 how eagerly the broom hunts the cat over footprints
-  roomDogDelay: number; // seconds before the dog barges into a room
+  roomDogChance: number; // per second, while the cat is on a room's floor
   fishCount: number;
-  eelCount: number;
+  eelCount: number; // eels at the start; every fish eaten brings one more
+  maxEels: number;
+  airSeconds: number;
   cheeseMice: number;
+  shyRadius: number; // cheese mice duck when the cat comes this close (px)
   sleepingDogs: number;
+  dogWakeRadius: number; // px; standing this close to a sleeping dog stirs it
   helpings: number; // bites per dog dish
   spiderSpeed: number;
+  birdFleeRadius: number;
   cupids: number;
   rivals: number;
-  gifts: number;
+  rivalChase: number; // 0..1 how often a rival heads for the cat
+  giftDistractSeconds: number;
+  sweetheartSpeed: number; // she strolls away along the top row until reached
 }
 
 export function difficulty(level: number): Difficulty {
   const l = clampLevel(level);
   return {
-    windowOpenEvery: 2.6 - l * 0.2,
-    windowOpenFor: 5.5 - l * 0.4,
-    throwChance: 0.25 + l * 0.08,
+    windowOpenEvery: 2.2 - l * 0.15,
+    windowOpenFor: pick([3.1, 2.6, 2.2, 1.8, 1.5, 1.7, 1.2, 1.6], l),
+    throwKills: l >= 2,
+    fenceCampSeconds: 4,
     dogSpeed: 150 + l * 18,
-    broomSpeed: 70 + l * 14,
+    broomSpeed: 80 + l * 16,
     broomChase: Math.min(1, (16 + l * 16) / 128),
-    roomDogDelay: 28 - l * 2.5,
-    fishCount: 5 + Math.floor(l / 2),
-    eelCount: 1 + Math.floor((l + 1) / 3),
-    cheeseMice: 5 + Math.floor(l / 2),
-    sleepingDogs: Math.min(6, 3 + Math.floor(l / 2)),
+    roomDogChance: 0.04 + l * 0.04,
+    fishCount: Math.min(12, 8 + l),
+    eelCount: pick([1, 2, 2, 3, 3, 4, 4, 5], l),
+    maxEels: pick([4, 5, 5, 6, 6, 7, 7, 8], l),
+    airSeconds: 15.8 - l * 0.87,
+    cheeseMice: 4 + Math.floor(l / 3),
+    shyRadius: pick([60, 140, 180, 220, 220, 260, 260, 260], l),
+    sleepingDogs: pick([4, 4, 5, 5, 6, 6, 7, 7], l),
+    dogWakeRadius: 110 + l * 10,
     helpings: Math.min(4, 1 + l),
-    spiderSpeed: 60 + l * 12,
-    cupids: 1 + Math.floor(l / 3),
-    rivals: 1 + Math.floor(l / 2),
-    gifts: 1,
+    spiderSpeed: 70 + l * 45,
+    birdFleeRadius: 120 + l * 30,
+    cupids: 1 + Math.floor(l / 4),
+    rivals: Math.min(6, 2 + Math.floor(l / 2)),
+    rivalChase: Math.min(0.75, (16 + l * 25) / 256),
+    giftDistractSeconds: 30 - l * 3.2,
+    sweetheartSpeed: 30 + l * 10,
   };
+}
+
+/**
+ * Cheese tunnels: hole i connects to CHEESE_PAIRS[level & 3][i]. Pairs are
+ * deliberately not neighbours, a "secret map" players learn (from the original).
+ */
+const PAIR_LISTS: [number, number][][] = [
+  [[0, 15], [1, 6], [2, 9], [3, 11], [4, 10], [5, 12], [7, 14], [8, 13]],
+  [[0, 14], [1, 11], [2, 6], [3, 15], [4, 12], [5, 10], [7, 9], [8, 13]],
+  [[0, 7], [1, 9], [2, 12], [3, 13], [4, 11], [5, 15], [6, 10], [8, 14]],
+  [[0, 2], [1, 13], [3, 14], [4, 15], [5, 6], [7, 11], [8, 12], [9, 10]],
+];
+
+export function cheesePartner(level: number, hole: number): number {
+  for (const [a, b] of PAIR_LISTS[clampLevel(level) & 3]) {
+    if (a === hole) return b;
+    if (b === hole) return a;
+  }
+  return hole;
 }
 
 /** Rooms on offer grow with level so new players learn them one at a time. */
@@ -126,11 +165,19 @@ export interface Session {
   skill: number;
   loveUnlocked: boolean; // a room was won since the last love scene attempt
   hasGift: boolean;
+  /** Each room won since the last kiss puts another gift in the love scene. */
+  roomsSinceKiss: number;
   roomHistory: RoomId[];
   roomsWon: number;
   kisses: number;
   combo: number;
   lastCatchAt: number; // seconds
+  /** One-off events this run (onboarding beats, hints already shown). */
+  seen: string[];
+  /** Onboarding gives one free bulldog bump per run. */
+  saveUsed: boolean;
+  /** Index of the alley window the sweetheart waits in (-1 = not chosen yet). */
+  herWindow: number;
 }
 
 export function newSession(skill = 0): Session {
@@ -141,11 +188,15 @@ export function newSession(skill = 0): Session {
     skill,
     loveUnlocked: false,
     hasGift: false,
+    roomsSinceKiss: 0,
     roomHistory: [],
     roomsWon: 0,
     kisses: 0,
     combo: 0,
     lastCatchAt: -999,
+    seen: [],
+    saveUsed: false,
+    herWindow: -1,
   };
 }
 
@@ -162,6 +213,7 @@ export function winRoom(s: Session, room: RoomId, elapsedSeconds: number): numbe
   const points = roomScore(room, elapsedSeconds);
   s.score += points;
   s.roomsWon += 1;
+  s.roomsSinceKiss += 1;
   s.loveUnlocked = true;
   return points;
 }
@@ -170,10 +222,12 @@ export function winLove(s: Session, elapsedSeconds: number): number {
   const points = loveScore(s.level, s.hasGift, elapsedSeconds);
   s.score += points;
   s.kisses += 1;
+  s.roomsSinceKiss = 0;
   s.lives = Math.min(MAX_LIVES, s.lives + 1);
   s.level = clampLevel(s.level + 1);
   s.loveUnlocked = false;
   s.hasGift = false;
+  s.herWindow = -1;
   return points;
 }
 

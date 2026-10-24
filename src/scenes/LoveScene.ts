@@ -7,6 +7,7 @@ import { difficulty, failLove, loveMultiplier, timeBonus, winLove, type Difficul
 import { Cat } from '../objects/Cat';
 import { oneWay } from '../objects/platforms';
 import { game } from '../state';
+import { firstTime, funnel, hint } from '../tutorial';
 
 const ROWS = 7;
 const COLS = 14;
@@ -28,6 +29,11 @@ interface Flyer {
   speed: number;
 }
 
+interface Rival extends Flyer {
+  until: number; // distracted by a gift until this time (ms)
+  think: number;
+}
+
 /** The love scene: climb the hearts to your sweetheart. */
 export class LoveScene extends Phaser.Scene {
   private cat!: Cat;
@@ -35,11 +41,13 @@ export class LoveScene extends Phaser.Scene {
   private diff!: Difficulty;
   private hearts: Heart[][] = [];
   private cupids: Flyer[] = [];
-  private rivals: Flyer[] = [];
-  private gift?: Phaser.GameObjects.Image;
+  private rivals: Rival[] = [];
+  private gifts: Phaser.GameObjects.Image[] = [];
   private girl!: Phaser.GameObjects.Image;
   private done = false;
   private elapsed = 0;
+  /** A new player's first climb: no rivals, cupids wait, the gift is on the way. */
+  private gentle = false;
 
   constructor() {
     super('Love');
@@ -52,6 +60,8 @@ export class LoveScene extends Phaser.Scene {
     this.cupids = [];
     this.rivals = [];
     this.diff = difficulty(game.session.level);
+    this.gentle = game.tutorial && firstTime('love');
+    funnel('love');
     this.physics.world.setBounds(0, -200, 1280, 1200);
     this.add.image(640, 360, 'bg_love').setDisplaySize(1280, 720).setDepth(-10);
 
@@ -74,11 +84,13 @@ export class LoveScene extends Phaser.Scene {
       this.hearts.push(row);
     }
 
-    // Sweetheart on a cloud at the top.
+    // A bank of clouds across the top; she strolls along it, keeping her distance.
+    for (let x = 100; x < 1280; x += 180) {
+      const cloud = this.add.ellipse(x, 112, 220, 50, 0xffffff, 0.9).setDepth(4);
+      this.tweens.add({ targets: cloud, scaleX: 1.04, duration: 1500 + x, yoyo: true, repeat: -1 });
+    }
+    ledges.add(this.add.zone(640, 96, 1280, 10));
     const gx = 300 + Math.random() * 680;
-    const cloud = this.add.ellipse(gx, 112, 220, 50, 0xffffff, 0.9).setDepth(4);
-    ledges.add(this.add.zone(gx, 96, 200, 10));
-    this.tweens.add({ targets: cloud, scaleX: 1.04, duration: 1500, yoyo: true, repeat: -1 });
     this.girl = fitHeight(this.add.image(gx + 40, 96, 'girlcat').setOrigin(0.5, 1).setDepth(6), 80);
     this.tweens.add({ targets: this.girl, angle: 5, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     this.time.addEvent({ delay: 1400, loop: true, callback: () => hearts(this, this.girl.x, this.girl.y - 60, 1) });
@@ -93,21 +105,26 @@ export class LoveScene extends Phaser.Scene {
       return oneWay(this.cat)(a, b);
     });
 
-    // Gift waits on the bottom row.
-    if (!game.session.hasGift) {
-      const gr = this.hearts[0][8 + Math.floor(Math.random() * 4)];
-      this.gift = fitHeight(this.add.image(gr.img.x, gr.img.y - 22, 'gift').setDepth(30), 36);
-      this.tweens.add({ targets: this.gift, y: this.gift.y - 8, duration: 500, yoyo: true, repeat: -1 });
+    // One gift on the bottom row for every room won since the last kiss.
+    this.gifts = [];
+    const giftCount = Math.max(1, Math.min(8, game.session.roomsSinceKiss));
+    for (let i = 0; i < giftCount; i++) {
+      const gr = this.hearts[0][this.gentle ? 3 : [8, 10, 6, 12, 4, 9, 11, 7][i]];
+      const g = fitHeight(this.add.image(gr.img.x, gr.img.y - 22, 'gift').setDepth(30), 36);
+      this.tweens.add({ targets: g, y: g.y - 8, duration: 500, yoyo: true, repeat: -1 });
+      this.gifts.push(g);
     }
+    game.session.hasGift = false;
 
     for (let i = 0; i < this.diff.cupids; i++) {
       const img = fitHeight(this.add.image(i % 2 ? 1300 : -20, 0, 'cupid').setDepth(40), 56);
       this.cupids.push({ img, dir: i % 2 ? -1 : 1, row: 1 + Math.floor(Math.random() * (ROWS - 1)), speed: 120 + this.diff.dogSpeed * 0.3 });
     }
-    for (let i = 0; i < this.diff.rivals; i++) {
-      const row = 2 + ((i * 2) % (ROWS - 2));
+    // One rival per row (rows 1-6), as many as the level allows.
+    const rows = Phaser.Utils.Array.Shuffle([1, 2, 3, 4, 5, 6]).slice(0, this.gentle ? 0 : this.diff.rivals);
+    for (const row of rows) {
       const img = fitHeight(this.add.image(200 + Math.random() * 800, ROW_Y0 - row * ROW_STEP - 18, 'rivalcat').setOrigin(0.5, 1).setDepth(35), 56);
-      this.rivals.push({ img, dir: Math.random() < 0.5 ? -1 : 1, row, speed: 70 + game.session.level * 10 });
+      this.rivals.push({ img, dir: Math.random() < 0.5 ? -1 : 1, row, speed: 80 + game.session.level * 14, until: 0, think: 0 });
     }
 
     this.scene.launch('Hud');
@@ -139,7 +156,9 @@ export class LoveScene extends Phaser.Scene {
     this.registry.set('bonus', timeBonus(this.elapsed / 2));
 
     // Cupids sweep a row and flip the hearts they pass over.
+    const cupidsAwake = !this.gentle || this.cat.y < ROW_Y0 - 2 * ROW_STEP - 30;
     for (const c of this.cupids) {
+      if (!cupidsAwake) continue;
       const prevX = c.img.x;
       c.img.x += c.dir * c.speed * dt;
       c.img.y = ROW_Y0 - c.row * ROW_STEP - 50 + Math.sin(this.time.now / 200) * 8;
@@ -158,18 +177,31 @@ export class LoveScene extends Phaser.Scene {
     }
 
     // Rival toms pace their row; bumping one knocks you down unless you bribe him.
+    const now = this.time.now;
     for (const r of this.rivals) {
-      if (!r.img.visible) continue;
+      if (now < r.until) {
+        r.img.setAngle(Math.sin(now / 150) * 6);
+        continue;
+      }
+      r.img.setAlpha(1).setAngle(0);
+      // Sometimes he heads straight for you; more often at higher levels.
+      if (now > r.think) {
+        r.think = now + 500;
+        if (Math.random() < this.diff.rivalChase) r.dir = Math.sign(this.cat.x - r.img.x) || r.dir;
+      }
       r.img.x += r.dir * r.speed * dt;
-      if (r.img.x < 60 || r.img.x > 1220) r.dir *= -1;
+      if (r.img.x < 60) r.dir = 1;
+      if (r.img.x > 1220) r.dir = -1;
       r.img.setFlipX(r.dir > 0); // art faces left
       if (!this.cat.invulnerable && Math.abs(r.img.x - this.cat.x) < 46 && Math.abs(r.img.y - 25 - this.cat.y) < 40) {
         if (game.session.hasGift) {
+          // A gift keeps him busy for a while, then he's back.
           game.session.hasGift = false;
+          r.until = now + this.diff.giftDistractSeconds * 1000;
+          r.img.setAlpha(0.6);
           AudioEngine.get().play('gift');
           popText(this, r.img.x, r.img.y - 70, 'For me?! 💝', '#ffb3d9');
           hearts(this, r.img.x, r.img.y - 40, 6);
-          this.tweens.add({ targets: r.img, y: -100, alpha: 0, duration: 900, onComplete: () => r.img.setVisible(false) });
         } else {
           AudioEngine.get().play('hit');
           AudioEngine.get().play('growl', { volume: 0.5 });
@@ -177,16 +209,27 @@ export class LoveScene extends Phaser.Scene {
           this.cat.knock(Math.sign(this.cat.x - r.img.x) || 1, 150, 500);
           this.cat.dropUntil = this.time.now + 350;
           this.cat.hurtFlash(1000);
+          if (this.gifts.some((g) => g.visible)) hint(this, this.cat.x, this.cat.y - 90, 'Gifts charm rivals!', 'gift');
         }
       }
     }
 
-    if (this.gift?.visible && Math.abs(this.gift.x - this.cat.x) < 40 && Math.abs(this.gift.y - this.cat.y) < 40) {
-      this.gift.setVisible(false);
+    // Carry one gift at a time.
+    for (const g of this.gifts) {
+      if (game.session.hasGift || !g.visible || Math.abs(g.x - this.cat.x) > 40 || Math.abs(g.y - this.cat.y) > 40) continue;
+      g.setVisible(false);
       game.session.hasGift = true;
       AudioEngine.get().play('gift');
-      sparkles(this, this.gift.x, this.gift.y, 12, 0x55ffff);
-      popText(this, this.gift.x, this.gift.y - 30, 'Gift! x2', '#55ffff');
+      sparkles(this, g.x, g.y, 12, 0x55ffff);
+      popText(this, g.x, g.y - 30, 'Gift! x2', '#55ffff');
+    }
+
+    // She plays hard to get: strolls away along the clouds while you're close.
+    const gd = this.girl.x - this.cat.x;
+    if (this.cat.y < ROW_Y0 - 4 * ROW_STEP && Math.abs(gd) < 320) {
+      const nx = this.girl.x + Math.sign(gd || 1) * this.diff.sweetheartSpeed * dt;
+      this.girl.x = Phaser.Math.Clamp(nx, 60, 1220);
+      this.girl.setFlipX(gd > 0);
     }
 
     if (Math.abs(this.girl.x - this.cat.x) < 60 && Math.abs(this.girl.y - 30 - this.cat.y) < 50) this.kiss();
@@ -195,6 +238,8 @@ export class LoveScene extends Phaser.Scene {
 
   private kiss(): void {
     this.done = true;
+    funnel('kiss');
+    if (game.tutorial) game.markOnboarded();
     const pts = winLove(game.session, this.elapsed);
     this.cat.frozen = true;
     this.cat.body.setVelocity(0, 0);

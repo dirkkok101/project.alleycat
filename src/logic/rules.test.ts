@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   catchLineMouse,
+  cheesePartner,
   difficulty,
   failLove,
   loseLife,
@@ -83,6 +84,9 @@ describe('difficulty and room selection', () => {
   it('gets harder with level', () => {
     expect(difficulty(7).dogSpeed).toBeGreaterThan(difficulty(0).dogSpeed);
     expect(difficulty(7).windowOpenFor).toBeLessThan(difficulty(0).windowOpenFor);
+    expect(difficulty(7).airSeconds).toBeLessThan(difficulty(0).airSeconds);
+    expect(difficulty(0).throwKills).toBe(false);
+    expect(difficulty(2).throwKills).toBe(true);
     expect(difficulty(99)).toEqual(difficulty(7));
   });
 
@@ -96,6 +100,18 @@ describe('difficulty and room selection', () => {
     const seq = [0, 0, 0, 0.99, 0.5];
     const rand = () => seq[i++ % seq.length];
     expect(pickRoom(0, ['cheese', 'cheese'], rand)).not.toBe('cheese');
+  });
+});
+
+describe('cheese tunnels', () => {
+  it('pairs every hole symmetrically on every level', () => {
+    for (let level = 0; level < 8; level++) {
+      for (let h = 0; h < 16; h++) {
+        const p = cheesePartner(level, h);
+        expect(p).not.toBe(h);
+        expect(cheesePartner(level, p)).toBe(h);
+      }
+    }
   });
 });
 

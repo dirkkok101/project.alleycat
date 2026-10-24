@@ -19,8 +19,10 @@ interface Spider {
   img: Phaser.GameObjects.Image;
   thread: Phaser.GameObjects.Graphics;
   x: number;
+  y: number;
   t: number;
   dir: number;
+  drop: 0 | 1 | 2; // 0 = on the ceiling, 1 = dropping, 2 = climbing back
 }
 
 /** Room 3: collect the potted ferns from the high shelves; mind the spider. */
@@ -57,25 +59,41 @@ export class BookcaseScene extends RoomScene {
     const count = this.diff.cupids; // 1 at low levels, more later
     for (let i = 0; i < count; i++) {
       const thread = this.add.graphics().setDepth(40);
-      const img = fitHeight(this.add.image(400 + i * 400, 200, 'spider').setDepth(41), 64);
-      this.spiders.push({ img, thread, x: 400 + i * 400, t: i * 2, dir: i % 2 ? -1 : 1 });
+      const img = fitHeight(this.add.image(400 + i * 400, 80, 'spider').setDepth(41), 64);
+      this.spiders.push({ img, thread, x: 400 + i * 400, y: 80, t: 0, dir: i % 2 ? -1 : 1, drop: 0 });
     }
   }
 
   protected updateRoom(dt: number): void {
     for (const sp of this.spiders) {
+      if (this.asleep) continue;
       sp.t += dt;
-      sp.x += sp.dir * this.diff.spiderSpeed * 0.7 * dt;
-      if (sp.x < 200) sp.dir = 1;
-      if (sp.x > 1180) sp.dir = -1;
-      // Drops toward the cat's height, then climbs back up.
-      const reach = 140 + (Math.sin(sp.t * 0.9) * 0.5 + 0.5) * (FLOOR_Y - 220);
+      // Scuttles along the ceiling toward the cat, drops when overhead, then climbs back.
+      if (sp.drop === 0) {
+        const dx = this.cat.x - sp.x;
+        sp.dir = Math.sign(dx) || sp.dir;
+        sp.x += sp.dir * Math.min(Math.abs(dx), this.diff.spiderSpeed * dt);
+        if (Math.abs(dx) < 24 && sp.t > 1) {
+          sp.drop = 1;
+          sp.t = 0;
+        }
+      } else if (sp.drop === 1) {
+        sp.y = Math.min(sp.y + 420 * dt, Math.min(this.cat.y + 30, FLOOR_Y - 40));
+        if (sp.t > 1.1) sp.drop = 2;
+      } else {
+        sp.y = Math.max(80, sp.y - 260 * dt);
+        if (sp.y <= 80) {
+          sp.drop = 0;
+          sp.t = 0;
+        }
+      }
+      const reach = sp.y;
       sp.img.setPosition(sp.x, reach);
-      sp.img.setAngle(Math.sin(sp.t * 3) * 8);
+      sp.img.setAngle(Math.sin(this.time.now / 80) * (sp.drop === 0 ? 10 : 4));
       sp.thread.clear();
       sp.thread.lineStyle(2, 0xffffff, 0.6);
       sp.thread.lineBetween(sp.x, 0, sp.x, reach - 20);
-      if (!this.cat.invulnerable && Math.abs(sp.img.x - this.cat.x) < 40 && Math.abs(sp.img.y - this.cat.y) < 40) {
+      if (sp.drop !== 0 && !this.cat.invulnerable && Math.abs(sp.img.x - this.cat.x) < 40 && Math.abs(sp.img.y - this.cat.y) < 40) {
         AudioEngine.get().play('hit');
         this.loseLife('Eek! A spider!');
         return;
@@ -86,6 +104,7 @@ export class BookcaseScene extends RoomScene {
       if (Math.abs(f.x - this.cat.x) < 40 && Math.abs(f.y - 20 - this.cat.y) < 45) {
         f.setVisible(false);
         this.got++;
+        this.progress();
         AudioEngine.get().play('collect', { pitch: 1 + this.got * 0.15 });
         sparkles(this, f.x, f.y - 20, 12, 0x8dff9a);
         popText(this, f.x, f.y - 40, `${this.got}/3`, '#8dff9a');

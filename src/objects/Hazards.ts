@@ -16,6 +16,8 @@ export class Broom {
   private wanderDir = 1;
   private nextThink = 0;
   private hitCooldown = 0;
+  private hunting = false;
+  private bornAt: number;
 
   constructor(
     private scene: Phaser.Scene,
@@ -31,22 +33,30 @@ export class Broom {
     // Only the bristles push; the handle is decoration so the cat can hop over.
     this.body.setSize(this.img.width * 0.45, this.img.height * 0.4);
     this.body.setOffset(this.img.width * 0.275, this.img.height * 0.6);
+    this.bornAt = scene.time.now;
   }
 
   update(cat: Cat, onFloor: boolean, onShove: (dir: number) => void): void {
     const now = this.scene.time.now;
     this.trackPrints(cat, onFloor);
 
+    // The longer the cat dawdles, the keener the broom gets (as in the original).
+    const aggro = Math.min(0.5, (now - this.bornAt) / 120000);
     if (now > this.nextThink) {
-      this.nextThink = now + 400;
+      this.nextThink = now + 500;
       const print = this.prints[0];
+      this.hunting = !print && Math.random() < this.chase + aggro;
       if (print) this.wanderDir = Math.sign(print.x - this.img.x) || 1;
-      else if (onFloor && Math.random() < this.chase + 0.25) this.wanderDir = Math.sign(cat.x - this.img.x) || 1;
+      else if (this.hunting || (onFloor && Math.random() < 0.5)) this.wanderDir = Math.sign(cat.x - this.img.x) || 1;
       else if (Math.random() < 0.3) this.wanderDir *= -1;
     }
     if (this.img.x < 140) this.wanderDir = 1;
     if (this.img.x > 1200) this.wanderDir = -1;
     this.body.setVelocityX(this.wanderDir * this.speed);
+    // It flies: hunting means rising up to the cat's ledge, otherwise it settles back to sweep.
+    const targetY = this.hunting ? Math.min(this.floorY, cat.bottom + 4) : this.floorY;
+    const dy = targetY - this.img.y;
+    this.body.setVelocityY(Math.abs(dy) < 4 ? 0 : Math.sign(dy) * Math.min(Math.abs(dy) * 4, this.speed * 1.2));
     this.img.setFlipX(this.wanderDir < 0);
     // Sweeping wobble
     this.img.setAngle(Math.sin(now / 90) * 8);
@@ -61,7 +71,8 @@ export class Broom {
 
     if (now > this.hitCooldown && !cat.invulnerable && this.scene.physics.overlap(this.img, cat.phys)) {
       this.hitCooldown = now + 1400;
-      const dir = this.wanderDir;
+      // Always swept toward the window the cat came in by (on the left).
+      const dir = -1;
       AudioEngine.get().play('sweep');
       cat.knock(dir, 340, 450);
       // Back off briefly so the cat gets a window to hop over.

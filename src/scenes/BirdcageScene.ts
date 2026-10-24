@@ -13,7 +13,7 @@ export class BirdcageScene extends RoomScene {
   readonly roomId = 'birdcage' as const;
   readonly bgKey = 'bg_bedroom' as const;
   readonly title = 'Tweet Tweet!';
-  readonly hint = 'Push the cage off the table, then catch the bird';
+  readonly hint = 'Shove the cage off · catch the bird';
   private cage!: Phaser.GameObjects.Image;
   private bird!: Phaser.GameObjects.Image;
   private phase: 'caged' | 'falling' | 'free' = 'caged';
@@ -59,7 +59,8 @@ export class BirdcageScene extends RoomScene {
     if (this.time.now < this.pushCooldown || dy > 60 || Math.abs(dx) > 60) return;
     const dir = dx < 0 ? 1 : -1; // push away from the cat
     this.pushCooldown = this.time.now + 500;
-    const step = 34;
+    this.progress();
+    const step = 40; // four shoves knock it off, as in the original
     this.tweens.add({ targets: this.cage, x: this.cage.x + dir * step, duration: 120, ease: 'Quad.Out' });
     this.tweens.add({ targets: this.cage, angle: dir * 8, duration: 80, yoyo: true });
     AudioEngine.get().play('push');
@@ -123,7 +124,11 @@ export class BirdcageScene extends RoomScene {
     }
     // Startled: flee when the cat comes close and is airborne.
     const cd = Phaser.Math.Distance.Between(b.x, b.y, this.cat.x, this.cat.y);
-    if (cd < 150 && this.restUntil !== -1 && Math.random() < 0.02) this.pickTarget();
+    if (cd < this.diff.birdFleeRadius && (this.restUntil === -1 || Math.random() < 0.04)) {
+      // Flushed: flee to the far side of the room.
+      this.restUntil = 0;
+      this.target.set(this.cat.x < 640 ? 900 + Math.random() * 280 : 120 + Math.random() * 280, 150 + Math.random() * 380);
+    }
     if (cd < 44 && !this.cat.stunned) {
       AudioEngine.get().play('tweet');
       hitStop(this, 90);
