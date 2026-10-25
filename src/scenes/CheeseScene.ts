@@ -3,6 +3,7 @@ import { AudioEngine } from '../audio';
 import { fitHeight } from '../assets';
 import { FONT, hitStop, popText, puff, sparkles } from '../fx';
 import { cheesePartner } from '../logic/rules';
+import { catTouches } from '../objects/platforms';
 import { game } from '../state';
 import { hint } from '../tutorial';
 import { FLOOR_Y, RoomScene } from './RoomScene';
@@ -191,8 +192,6 @@ export class CheeseScene extends RoomScene {
   }
 
   private updateMice(dt: number): void {
-    const b = this.cat.body;
-    const catRect = new Phaser.Geom.Rectangle(b.x, b.y, b.width, b.height);
     for (const m of this.mice) {
       if (m.hole < 0) continue;
       const h = this.holes[m.hole];
@@ -209,8 +208,7 @@ export class CheeseScene extends RoomScene {
         continue;
       }
       // Touch to catch; it works while walking, standing or mid-jump.
-      const r = Phaser.Geom.Rectangle.Inflate(m.img.getBounds(), 4, 4);
-      if (!this.tunnelling && !this.cat.stunned && Phaser.Geom.Intersects.RectangleToRectangle(r, catRect)) {
+      if (!this.tunnelling && !this.cat.stunned && catTouches(this.cat, m.img, 0.05)) {
         this.catchMouse(m);
         continue;
       }

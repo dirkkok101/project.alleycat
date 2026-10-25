@@ -6,7 +6,7 @@ import { banner, fadeIn, hearts, hitStop, popText, puff, shake, sparkles, wipeTo
 import { Controls } from '../input';
 import { difficulty, failLove, loveMultiplier, timeBonus, winLove, type Difficulty } from '../logic/rules';
 import { Cat } from '../objects/Cat';
-import { oneWay } from '../objects/platforms';
+import { catTouches, oneWay } from '../objects/platforms';
 import { game } from '../state';
 import { firstTime, funnel, hint } from '../tutorial';
 
@@ -195,7 +195,7 @@ export class LoveScene extends Phaser.Scene {
       if (r.img.x < 60) r.dir = 1;
       if (r.img.x > 1220) r.dir = -1;
       r.img.setFlipX(r.dir > 0); // art faces left
-      if (!this.cat.invulnerable && Math.abs(r.img.x - this.cat.x) < 46 && Math.abs(r.img.y - 25 - this.cat.y) < 40) {
+      if (!this.cat.invulnerable && catTouches(this.cat, r.img, 0.2)) {
         if (game.session.hasGift) {
           // A gift keeps him busy for a while, then he's back.
           game.session.hasGift = false;
@@ -218,7 +218,7 @@ export class LoveScene extends Phaser.Scene {
 
     // Carry one gift at a time.
     for (const g of this.gifts) {
-      if (game.session.hasGift || !g.visible || Math.abs(g.x - this.cat.x) > 40 || Math.abs(g.y - this.cat.y) > 40) continue;
+      if (game.session.hasGift || !catTouches(this.cat, g, 0)) continue;
       g.setVisible(false);
       game.session.hasGift = true;
       AudioEngine.get().play('gift');
@@ -234,7 +234,7 @@ export class LoveScene extends Phaser.Scene {
       this.girl.setFlipX(gd > 0);
     }
 
-    if (Math.abs(this.girl.x - this.cat.x) < 60 && Math.abs(this.girl.y - 30 - this.cat.y) < 50) this.kiss();
+    if (catTouches(this.cat, this.girl, 0.15)) this.kiss();
     if (this.cat.y > 760) this.fall();
   }
 

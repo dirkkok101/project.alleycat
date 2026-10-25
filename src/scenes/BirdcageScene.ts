@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { AudioEngine } from '../audio';
 import { fitHeight } from '../assets';
 import { hitStop, popText, puff, shake, sparkles } from '../fx';
+import { catTouches } from '../objects/platforms';
 import { FLOOR_Y, RoomScene } from './RoomScene';
 
 const TABLE_X = 760;
@@ -55,8 +56,7 @@ export class BirdcageScene extends RoomScene {
   private updateCage(): void {
     const cat = this.cat;
     const dx = cat.x - this.cage.x;
-    const dy = Math.abs(cat.y - (this.cage.y - 50));
-    if (this.time.now < this.pushCooldown || dy > 60 || Math.abs(dx) > 60) return;
+    if (this.time.now < this.pushCooldown || !catTouches(cat, this.cage, 0.1)) return;
     const dir = dx < 0 ? 1 : -1; // push away from the cat
     this.pushCooldown = this.time.now + 500;
     this.progress();
@@ -129,7 +129,7 @@ export class BirdcageScene extends RoomScene {
       this.restUntil = 0;
       this.target.set(this.cat.x < 640 ? 900 + Math.random() * 280 : 120 + Math.random() * 280, 150 + Math.random() * 380);
     }
-    if (cd < 44 && !this.cat.stunned) {
+    if (!this.cat.stunned && catTouches(this.cat, b, 0.12)) {
       AudioEngine.get().play('tweet');
       hitStop(this, 90);
       sparkles(this, b.x, b.y, 14, 0xfff07a);

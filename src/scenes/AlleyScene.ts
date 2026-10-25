@@ -7,7 +7,7 @@ import { Controls } from '../input';
 import { catchLineMouse, difficulty, loseLife, pickRoom, type Difficulty, type RoomId } from '../logic/rules';
 import { Cat } from '../objects/Cat';
 import { Bulldog } from '../objects/Hazards';
-import { catIn, oneWay } from '../objects/platforms';
+import { catIn, catTouches, oneWay } from '../objects/platforms';
 import { game } from '../state';
 import { firstTime, funnel, hasSeen, hint, useFreeSave } from '../tutorial';
 
@@ -216,9 +216,8 @@ export class AlleyScene extends Phaser.Scene {
   private updateTutorMouse(): void {
     const m = this.tutorMouse;
     if (!m) return;
-    const r = Phaser.Geom.Rectangle.Inflate(m.getBounds(), 12, 12);
-    const b = this.cat.body;
-    if (this.cat.stunned || !Phaser.Geom.Intersects.RectangleToRectangle(r, new Phaser.Geom.Rectangle(b.x, b.y, b.width, b.height))) return;
+    // The very first catch should be easy: a generous box around the sitting mouse.
+    if (this.cat.stunned || !catTouches(this.cat, m, -0.35)) return;
     const pts = catchLineMouse(game.session, 0, this.time.now / 1000);
     AudioEngine.get().play('catch');
     AudioEngine.get().play('squeak');
@@ -442,9 +441,7 @@ export class AlleyScene extends Phaser.Scene {
       m.img.setFlipX(m.dir < 0);
       m.img.y = LINE_YS[m.line] + this.lines[m.line].sag * Math.max(0, 1 - Math.abs(m.img.x - this.cat.x) / 500);
 
-      const dx = Math.abs(this.cat.x - m.img.x);
-      const dy = Math.abs(this.cat.y - (m.img.y - 14));
-      if (dx < 40 && dy < 40 && !this.cat.stunned) {
+      if (!this.cat.stunned && catTouches(this.cat, m.img, 0.1)) {
         m.alive = false;
         m.respawnAt = this.elapsed + 3;
         const pts = catchLineMouse(game.session, m.line, this.time.now / 1000);

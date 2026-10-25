@@ -1,4 +1,4 @@
-import type Phaser from 'phaser';
+import Phaser from 'phaser';
 import type { Cat } from './Cat';
 
 type Bodyish = { body: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | null };
@@ -22,4 +22,21 @@ export function catIn(cat: Cat, zone: Phaser.GameObjects.Zone): boolean {
   const zx = zone.x - zone.width / 2;
   const zy = zone.y - zone.height / 2;
   return b.right > zx && b.x < zx + zone.width && b.bottom > zy && b.y < zy + zone.height;
+}
+
+/**
+ * The one touch rule for pickups and hazards: the cat's body against the
+ * target sprite's bounds, inset by `inset` (fraction of each side) because
+ * sprites carry transparent padding and rounded shapes. A negative inset
+ * grows the box, for deliberately generous targets.
+ */
+export function catTouches(cat: Cat, target: Phaser.GameObjects.Image, inset = 0.15): boolean {
+  if (!target.visible) return false;
+  const r = target.getBounds();
+  const dx = r.width * inset;
+  const dy = r.height * inset;
+  const b = cat.body;
+  const hit = b.right > r.x + dx && b.x < r.right - dx && b.bottom > r.y + dy && b.y < r.bottom - dy;
+  if (cat.debugDraw) cat.debugDraw(r.x + dx, r.y + dy, r.width - 2 * dx, r.height - 2 * dy, hit);
+  return hit;
 }

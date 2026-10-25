@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { AudioEngine } from '../audio';
 import { fitHeight } from '../assets';
 import { popText, sparkles } from '../fx';
+import { catTouches } from '../objects/platforms';
 import { FLOOR_Y, RoomScene } from './RoomScene';
 
 // Wall shelves as [x, y, width]; staggered so there are several routes up.
@@ -73,6 +74,8 @@ export class BookcaseScene extends RoomScene {
         const dx = this.cat.x - sp.x;
         sp.dir = Math.sign(dx) || sp.dir;
         sp.x += sp.dir * Math.min(Math.abs(dx), this.diff.spiderSpeed * dt);
+        // The window ledge you arrive on is out of its reach.
+        sp.x = Phaser.Math.Clamp(sp.x, 260, 1220);
         if (Math.abs(dx) < 24 && sp.t > 1) {
           sp.drop = 1;
           sp.t = 0;
@@ -93,7 +96,7 @@ export class BookcaseScene extends RoomScene {
       sp.thread.clear();
       sp.thread.lineStyle(2, 0xffffff, 0.6);
       sp.thread.lineBetween(sp.x, 0, sp.x, reach - 20);
-      if (sp.drop !== 0 && !this.cat.invulnerable && Math.abs(sp.img.x - this.cat.x) < 40 && Math.abs(sp.img.y - this.cat.y) < 40) {
+      if (sp.drop !== 0 && !this.cat.invulnerable && catTouches(this.cat, sp.img, 0.25)) {
         AudioEngine.get().play('hit');
         this.loseLife('Eek! A spider!');
         return;
@@ -101,7 +104,7 @@ export class BookcaseScene extends RoomScene {
     }
     for (const f of this.ferns) {
       if (!f.visible) continue;
-      if (Math.abs(f.x - this.cat.x) < 40 && Math.abs(f.y - 20 - this.cat.y) < 45) {
+      if (catTouches(this.cat, f, 0.1)) {
         f.setVisible(false);
         this.got++;
         this.progress();

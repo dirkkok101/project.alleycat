@@ -35,6 +35,8 @@ export class Cat {
   /** A scene tween is animating the art; leave it alone. */
   posed = false;
   dead = false;
+  /** Set when ?debug is on: draws a target's hit box for one frame. */
+  debugDraw?: (x: number, y: number, w: number, h: number, hit: boolean) => void;
 
   private lastGroundAt = -9999;
   private lastJumpPressAt = -9999;
@@ -50,7 +52,9 @@ export class Cat {
   private sqTween?: Phaser.Tweens.Tween;
 
   constructor(private scene: Phaser.Scene, x: number, y: number) {
-    this.phys = scene.add.zone(x, y, 44, 46);
+    // Covers the body and head of the art (tail and whiskers excluded), so touches
+    // land where the player sees the cat.
+    this.phys = scene.add.zone(x, y, 48, 68);
     scene.physics.add.existing(this.phys);
     this.body = this.phys.body as Phaser.Physics.Arcade.Body;
     this.body.setCollideWorldBounds(true);
@@ -59,6 +63,12 @@ export class Cat {
     this.idleFrames = animFrames(scene, ANIMS.catIdle, ['cat_idle']);
     this.baseScale = charScale(scene, 'cat', HEIGHT, 'cat_idle');
     this.img = scene.add.image(x, y, 'cat_idle').setOrigin(0.5, 1).setDepth(500);
+    if (scene.physics.world.drawDebug) {
+      this.debugDraw = (dx, dy, w, h, hit) => {
+        const r = scene.add.rectangle(dx, dy, w, h).setOrigin(0).setStrokeStyle(2, hit ? 0xff3355 : 0x33ff99).setDepth(2000);
+        scene.time.delayedCall(0, () => r.destroy());
+      };
+    }
     this.setPose('cat_idle');
   }
 

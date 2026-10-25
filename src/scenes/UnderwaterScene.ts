@@ -4,6 +4,7 @@ import { fitHeight, fitWidth } from '../assets';
 import { popText, sparkles } from '../fx';
 import { game } from '../state';
 import { hint } from '../tutorial';
+import { catTouches } from '../objects/platforms';
 import { RoomScene } from './RoomScene';
 
 const SURFACE_Y = 120;
@@ -118,7 +119,7 @@ export class UnderwaterScene extends RoomScene {
       f.img.x = Phaser.Math.Clamp(f.img.x, 60, 1220);
       f.img.y = Phaser.Math.Clamp(f.img.y, SURFACE_Y + 60, 640);
       f.img.setFlipX(f.vx < 0);
-      if (d < 46 && !cat.stunned) {
+      if (!cat.stunned && catTouches(cat, f.img, 0.12)) {
         f.alive = false;
         this.progress();
         this.addEel();
@@ -142,7 +143,8 @@ export class UnderwaterScene extends RoomScene {
       if (e.img.x > 1340) e.dir = -1;
       e.img.setFlipX(e.dir < 0);
       e.img.setTint(Math.sin(e.t * 12) > 0.6 ? 0xffffaa : 0xffffff);
-      if (Math.abs(e.img.x - cat.x) < 55 && Math.abs(e.img.y - cat.y) < 30 && !cat.invulnerable) {
+      // Hazards get a bigger inset: a graze shouldn't count.
+      if (!cat.invulnerable && catTouches(cat, e.img, 0.25)) {
         AudioEngine.get().play('zap');
         this.loseLife('Bzzzt! Eel zap!');
         return;

@@ -27,7 +27,8 @@ const game = new Phaser.Game({
   audio: { noAudio: true },
   physics: {
     default: 'arcade',
-    arcade: { gravity: { x: 0, y: 2000 }, fps: 60, debug: false },
+    // ?debug (dev only) draws every physics body and platform for hitbox checks.
+    arcade: { gravity: { x: 0, y: 2000 }, fps: 60, debug: import.meta.env.DEV && new URLSearchParams(location.search).has('debug') },
   },
   scene: [
     BootScene, TitleScene, AlleyScene, FishbowlScene, UnderwaterScene, BookcaseScene,
