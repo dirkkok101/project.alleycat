@@ -53,6 +53,9 @@ window.__calm = () => {
   s.broom = undefined;
   s.rivals = [];
   s.cupids = [];
+  if (s.eels) for (const e of s.eels) e.img.setVisible(false);
+  if (s.eels) s.eels = [];
+  if (s.dogs) for (const d of s.dogs) d.noise = -999;
   return true;
 };
 window.__bots.alley = () => {
@@ -117,4 +120,10 @@ window.__floorDish = () => {
 window.__dogshot = () => {
   const d = window.__scene().dog.img;
   return { x: d.x, y: d.y, active: window.__scene().dog.active };
+};
+window.__toFern = () => {
+  const s = window.__scene();
+  const f = s.ferns.find((x) => x.visible);
+  s.cat.body.reset(f.x - 70, f.y - 40);
+  return [f.x, f.y];
 };
